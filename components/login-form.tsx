@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAuth, type UserRole } from "@/components/auth-provider"
 import { RoleSelector } from "@/components/role-selector"
+import { SignupForm } from "@/components/signup-form"
 import { Eye, EyeOff, Loader2 } from "lucide-react"
 
 export function LoginForm() {
@@ -17,7 +18,8 @@ export function LoginForm() {
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [step, setStep] = useState<"role" | "credentials">("role")
-  const { login, loading } = useAuth()
+  const [isSignup, setIsSignup] = useState(false)
+  const { login, loading, error } = useAuth()
 
   const handleRoleSelect = (role: UserRole) => {
     setSelectedRole(role)
@@ -33,6 +35,10 @@ export function LoginForm() {
     } catch (error) {
       console.error("Login failed:", error)
     }
+  }
+
+  if (isSignup) {
+    return <SignupForm onBackToLogin={() => setIsSignup(false)} />
   }
 
   const getRoleGradient = (role: UserRole | null) => {
@@ -98,6 +104,10 @@ export function LoginForm() {
                   </div>
                 </div>
 
+                {error && (
+                  <div className="text-red-500 text-sm text-center">{error}</div>
+                )}
+
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" onClick={() => setStep("role")} className="flex-1">
                     Back
@@ -116,6 +126,19 @@ export function LoginForm() {
                       "Sign In"
                     )}
                   </Button>
+                </div>
+
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Don't have an account?{' '}
+                    <button
+                      type="button"
+                      onClick={() => setIsSignup(true)}
+                      className="text-primary hover:underline"
+                    >
+                      Sign up
+                    </button>
+                  </p>
                 </div>
               </form>
             </CardContent>
