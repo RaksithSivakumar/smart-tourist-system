@@ -16,13 +16,17 @@ export function verifyToken(token: string): JWTPayload | null {
   try {
     return jwt.verify(token, JWT_SECRET) as JWTPayload;
   } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError) {
+      console.error('Invalid token:', error.message);
+    } else if (error instanceof jwt.TokenExpiredError) {
+      console.error('Token expired:', error.message);
+    } else {
+      console.error('Token verification failed:', error);
+    }
     return null;
   }
 }
 
 export function extractTokenFromHeader(authHeader: string | undefined): string | null {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-  return authHeader.substring(7);
+  return authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
 }
