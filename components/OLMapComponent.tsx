@@ -1,17 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import "ol/ol.css";
-import { Map, View } from "ol";
-import TileLayer from "ol/layer/Tile";
-import OSM from "ol/source/OSM";
-import { fromLonLat } from "ol/proj";
-import Feature from "ol/Feature";
-import Point from "ol/geom/Point";
-import VectorLayer from "ol/layer/Vector";
-import VectorSource from "ol/source/Vector";
-import { Icon, Style } from "ol/style";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 import Image from "next/image";
+
+// Set Mapbox access token (you'll need to set this in your environment variables)
+mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
+
 interface FoodStore {
   name: string;
   address: string;
@@ -59,81 +55,158 @@ const Loader = () => (
   </div>
 );
 
-interface OLMapProps {
-  showUI?: boolean;
-  searchRequest?: string | null;
-  onLocationDataUpdate?: (data: EnhancedLocationData | null) => void;
-}
-
-const OLMapComponent = ({ showUI = true, searchRequest = null, onLocationDataUpdate }: OLMapProps) => {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const [mapInstance, setMapInstance] = useState<Map | null>(null);
+const MapboxComponent = () => {
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
   const [locationData, setLocationData] = useState<EnhancedLocationData | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [submittedQuestion, setSubmittedQuestion] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [markerLayer, setMarkerLayer] = useState<VectorLayer<VectorSource> | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'food' | 'restrictions' | 'culture'>('overview');
   const [selectedFoodStreet, setSelectedFoodStreet] = useState<number | null>(null);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const markerRef = useRef<mapboxgl.Marker | null>(null);
+  const userLocationMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
   const unsplashAccessKey = process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY;
 
   useEffect(() => {
-    if (mapRef.current && !mapInstance) {
-      const initialMap = new Map({
-        target: mapRef.current,
-        layers: [
-          new TileLayer({
-            source: new OSM(),
-          }),
-        ],
-        view: new View({
-          center: fromLonLat([-79.3871, 43.6426]),
-          zoom: 11,
-        }),
+    if (mapContainer.current && !mapRef.current) {
+      // Initialize Mapbox map
+      mapRef.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/streets-v11',
+        center: [-79.3871, 43.6426], // [lng, lat]
+        zoom: 11
       });
-      setMapInstance(initialMap);
+
+      // Add navigation control
+      mapRef.current.addControl(new mapboxgl.NavigationControl());
+      
+      // Add geolocate control
+      const geolocateControl = new mapboxgl.GeolocateControl({
+        positionOptions: {
+          enableHighAccuracy: true
+        },
+        trackUserLocation: true,
+        showUserLocation: true,
+        showAccuracyCircle: false
+      });
+      
+      mapRef.current.addControl(geolocateControl);
+      
+      // Handle geolocate events
+      geolocateControl.on('geolocate', (e: any) => {
+        setUserLocation([e.coords.longitude, e.coords.latitude]);
+      });
+      
+      geolocateControl.on('error', (error: any) => {
+        setLocationError('Unable to get your location: ' + error.message);
+      });
     }
-  }, [mapRef, mapInstance]);
+  }, []);
+
+  // Function to get user's current location
+  const getUserLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not supported by this browser.");
+      return;
+    }
+
+    setIsLocating(true);
+    setLocationError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { longitude, latitude } = position.coords;
+        const userCoords: [number, number] = [longitude, latitude];
+        
+        setUserLocation(userCoords);
+        setIsLocating(false);
+        
+        // Add/update user location marker
+        if (userLocationMarkerRef.current) {
+          userLocationMarkerRef.current.remove();
+        }
+        
+        const el = document.createElement('div');
+        el.className = 'user-location-marker';
+        el.style.backgroundImage = 'url(https://cdn-icons-png.flaticon.com/512/684/684908.png)';
+        el.style.width = '30px';
+        el.style.height = '30px';
+        el.style.backgroundSize = 'cover';
+        el.style.cursor = 'pointer';
+        
+        userLocationMarkerRef.current = new mapboxgl.Marker(el)
+          .setLngLat(userCoords)
+          .addTo(mapRef.current!);
+        
+        // Center map on user location
+        mapRef.current?.flyTo({
+          center: userCoords,
+          zoom: 13,
+          duration: 1000
+        });
+      },
+      (error) => {
+        setIsLocating(false);
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError("User denied the request for Geolocation.");
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setLocationError("Location information is unavailable.");
+            break;
+          case error.TIMEOUT:
+            setLocationError("The request to get user location timed out.");
+            break;
+          default:
+            setLocationError("An unknown error occurred.");
+            break;
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000
+      }
+    );
+  };
 
   useEffect(() => {
-    if (locationData && mapInstance) {
-      // Clean up previous marker layer
-      if (markerLayer) {
-        mapInstance.removeLayer(markerLayer);
+    if (locationData && mapRef.current) {
+      // Remove previous marker if exists
+      if (markerRef.current) {
+        markerRef.current.remove();
       }
 
-      const feature = new Feature({
-        geometry: new Point(fromLonLat([locationData.coordinates[1], locationData.coordinates[0]])),
-        name: locationData.title,
-      });
+      // Create a DOM element for the marker
+      const el = document.createElement('div');
+      el.className = 'food-marker';
+      el.style.backgroundImage = 'url(https://cdn-icons-png.flaticon.com/512/2776/2776067.png)';
+      el.style.width = '40px';
+      el.style.height = '40px';
+      el.style.backgroundSize = 'cover';
+      el.style.cursor = 'pointer';
 
-      feature.setStyle(
-        new Style({
-          image: new Icon({
-            anchor: [0.5, 1],
-            src: "https://cdn-icons-png.flaticon.com/512/2776/2776067.png", // Food pin icon
-            scale: 0.08,
-          }),
-        })
-      );
+      // Add marker to map
+      markerRef.current = new mapboxgl.Marker(el)
+        .setLngLat([locationData.coordinates[1], locationData.coordinates[0]])
+        .addTo(mapRef.current);
 
-      const vectorSource = new VectorSource({ features: [feature] });
-      const vectorLayer = new VectorLayer({ source: vectorSource });
-
-      mapInstance.addLayer(vectorLayer);
-      setMarkerLayer(vectorLayer);
-
-      mapInstance.getView().animate({
-        center: fromLonLat([locationData.coordinates[1], locationData.coordinates[0]]),
+      // Fly to the location
+      mapRef.current.flyTo({
+        center: [locationData.coordinates[1], locationData.coordinates[0]],
         zoom: 13,
-        duration: 1500,
+        duration: 1500
       });
 
       setShowSidebar(true);
     }
-  }, [locationData, mapInstance, markerLayer]); // Include markerLayer in the dependency array
+  }, [locationData]);
 
   const fetchLocationImage = async (place: string): Promise<string | null> => {
     if (!unsplashAccessKey) {
@@ -154,7 +227,6 @@ const OLMapComponent = ({ showUI = true, searchRequest = null, onLocationDataUpd
       
       const data = await response.json();
       if (data.results && data.results.length > 0) {
-        // Use small URL to avoid loading issues and reduce bandwidth
         return data.results[0].urls.small;
       }
       return null;
@@ -232,7 +304,7 @@ const OLMapComponent = ({ showUI = true, searchRequest = null, onLocationDataUpd
       {loading && <Loader />}
       
       {/* Main Map */}
-      <div ref={mapRef} style={{ width: "100vw", height: "100vh" }} />
+      <div ref={mapContainer} style={{ width: "100vw", height: "100vh" }} />
 
       {showUI && (
         <>
@@ -258,6 +330,28 @@ const OLMapComponent = ({ showUI = true, searchRequest = null, onLocationDataUpd
         </div>
       </div>
 
+      {/* Location Button */}
+      <div className="absolute top-24 right-6 z-[15000] flex flex-col space-y-3">
+        <button
+          onClick={getUserLocation}
+          disabled={isLocating}
+          className="bg-white p-3 rounded-full shadow-lg hover:bg-gray-100 transition-all duration-200 flex items-center justify-center"
+          title="Find my location"
+        >
+          {isLocating ? (
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+          ) : (
+            <span className="text-xl">📍</span>
+          )}
+        </button>
+        
+        {locationError && (
+          <div className="bg-red-100 text-red-700 p-2 rounded-lg text-xs max-w-xs">
+            {locationError}
+          </div>
+        )}
+      </div>
+
       {/* Enhanced Sidebar */}
       {locationData && showSidebar && (
         <div className="absolute top-0 right-0 w-96 h-full bg-white shadow-2xl z-[15000] overflow-hidden">
@@ -268,8 +362,8 @@ const OLMapComponent = ({ showUI = true, searchRequest = null, onLocationDataUpd
                 src={locationData.imageUrl} 
                 alt={locationData.title}
                 className="w-full h-full object-cover"
-                width={384} // Width of the sidebar (w-96)
-                height={192} // Height of the header (h-48)
+                width={384}
+                height={192}
                 priority
               />
             )}
@@ -466,4 +560,4 @@ const OLMapComponent = ({ showUI = true, searchRequest = null, onLocationDataUpd
   );
 };
 
-export default OLMapComponent;
+export default MapboxComponent;
