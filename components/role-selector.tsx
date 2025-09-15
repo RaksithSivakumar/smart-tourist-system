@@ -20,6 +20,14 @@ const roles = [
     features: ["Digital ID", "SOS Button", "Safety Alerts", "Travel Docs"],
   },
   {
+    id: "guide" as UserRole,
+    name: "Guide",
+    description: "Assist tourists with safety and guidance",
+    icon: MapPin,
+    gradient: "gradient-guide",
+    features: ["Tourist Management", "Safety Guidance", "Region Assignment", "Emergency Response"],
+  },
+  {
     id: "police" as UserRole,
     name: "Police",
     description: "Incident response and tourist safety",

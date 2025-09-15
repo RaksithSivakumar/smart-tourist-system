@@ -3,6 +3,7 @@
 import { useAuth } from "@/components/auth-provider"
 import { LoginForm } from "@/components/login-form"
 import { TouristDashboard } from "@/components/dashboards/tourist-dashboard"
+import { GuideDashboard } from "@/components/dashboards/guide-dashboard"
 import { PoliceDashboard } from "@/components/dashboards/police-dashboard"
 import { HotelDashboard } from "@/components/dashboards/hotel-dashboard"
 import { AirportDashboard } from "@/components/dashboards/airport-dashboard"
@@ -27,6 +28,8 @@ export default function HomePage() {
   switch (user.role) {
     case "tourist":
       return <TouristDashboard />
+    case "guide":
+      return <GuideDashboard />
     case "police":
       return <PoliceDashboard />
     case "hotel":
