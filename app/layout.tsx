@@ -35,8 +35,8 @@ export default function RootLayout({
           <Suspense fallback={null}>
             <AuthProvider>
               {children}
-              <NotificationSystem />
-              <AIChatbot />
+              {/* <NotificationSystem />
+              <AIChatbot /> */}
             </AuthProvider>
           </Suspense>
         </ThemeProvider>
