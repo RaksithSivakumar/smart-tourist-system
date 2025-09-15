@@ -1,14 +1,25 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema, Model } from 'mongoose';
 
+// Location interface
+export interface ILocation {
+  lat: number;
+  lng: number;
+  city: string;
+  updatedAt: Date;
+}
+
+// Interface for IUser
 export interface IUser extends Document {
   role: 'tourist' | 'guide' | 'police' | 'hotel' | 'airport';
   email: string;
   password: string;
-  // Role-specific fields
+  // Updated role-specific fields
   tourist?: {
     name: string;
     passport_no: string;
     emergency_contact: string;
+    lastLocation?: ILocation;
+    locationHistory: ILocation[];
   };
   guide?: {
     name: string;
@@ -33,59 +44,71 @@ export interface IUser extends Document {
     authority_contact: string;
   };
   created_at: Date;
+  updated_at: Date;
 }
 
-const userSchema = new Schema<IUser>({
-  role: {
-    type: String,
-    enum: ['tourist', 'guide', 'police', 'hotel', 'airport'],
-    required: true,
-  },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true,
-  },
-  password: {
-    type: String,
-    required: true,
-  },
-  // Role-specific fields
-  tourist: {
-    name: String,
-    passport_no: String,
-    emergency_contact: String,
-  },
-  guide: {
-    name: String,
-    license_id: String,
-    region_assigned: String,
-  },
-  police: {
-    name: String,
-    badge_id: String,
-    station_location: String,
-  },
-  hotel: {
-    hotel_name: String,
-    registration_id: String,
-    location: String,
-    contact_number: String,
-  },
-  airport: {
-    airport_name: String,
-    iata_code: String,
-    location: String,
-    authority_contact: String,
-  },
-  created_at: {
-    type: Date,
-    default: Date.now,
-  },
+// Location Schema
+const LocationSchema = new Schema<ILocation>({
+  lat: { type: Number, required: true },
+  lng: { type: Number, required: true },
+  city: { type: String, required: true },
+  updatedAt: { type: Date, required: true },
 });
 
-// Create indexes for better performance
+// User Schema
+const userSchema = new Schema<IUser>(
+  {
+    role: {
+      type: String,
+      enum: ['tourist', 'guide', 'police', 'hotel', 'airport'],
+      required: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+    },
+    password: {
+      type: String,
+      required: true,
+    },
+    tourist: {
+      name: { type: String },
+      passport_no: { type: String },
+      emergency_contact: { type: String },
+      lastLocation: LocationSchema,
+      locationHistory: { type: [LocationSchema], default: [] },
+    },
+    guide: {
+      name: { type: String },
+      license_id: { type: String },
+      region_assigned: { type: String },
+    },
+    police: {
+      name: { type: String },
+      badge_id: { type: String },
+      station_location: { type: String },
+    },
+    hotel: {
+      hotel_name: { type: String },
+      registration_id: { type: String },
+      location: { type: String },
+      contact_number: { type: String },
+    },
+    airport: {
+      airport_name: { type: String },
+      iata_code: { type: String },
+      location: { type: String },
+      authority_contact: { type: String },
+    },
+    created_at: { type: Date, default: Date.now },
+    updated_at: { type: Date, default: Date.now },
+  },
+  { timestamps: true }
+);
+
+// Indexes for performance
 userSchema.index({ email: 1, role: 1 });
 userSchema.index({ 'tourist.passport_no': 1 });
 userSchema.index({ 'guide.license_id': 1 });
@@ -93,4 +116,5 @@ userSchema.index({ 'police.badge_id': 1 });
 userSchema.index({ 'hotel.registration_id': 1 });
 userSchema.index({ 'airport.iata_code': 1 });
 
+// Export model
 export default mongoose.models.User || mongoose.model<IUser>('User', userSchema);
