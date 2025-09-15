@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -59,8 +58,6 @@ interface TouristSidebarProps {
   formatTime: (d: Date) => string
   getRouteIcon: (type: string) => JSX.Element
   getRouteColor: (type: string) => string
-  onOlSearch: (q: string) => void
-  olLocationData: any | null
 }
 
 export function TouristSidebar(props: TouristSidebarProps) {
@@ -87,11 +84,9 @@ export function TouristSidebar(props: TouristSidebarProps) {
     formatTime,
     getRouteIcon,
     getRouteColor,
-    onOlSearch,
-    olLocationData,
   } = props
 
-  const [olQuery, setOlQuery] = useState("")
+  
 
   return (
     <div className={`fixed top-0 left-0 h-full bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 transition-all duration-300 z-10 ${sidebarOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
@@ -132,70 +127,41 @@ export function TouristSidebar(props: TouristSidebarProps) {
         <div className="flex flex-col h-[calc(100vh-140px)]">
           <ScrollArea className="flex-1 p-4 min-h-0">
             <div className="space-y-4">
-              {/* OLMap Search Bar */}
-              <div className="mt-4">
-                <label className="text-sm font-medium">Discover Food Streets</label>
-                <div className="flex items-center mt-2 space-x-2">
-                  <Input
-                    placeholder="City or place..."
-                    value={olQuery}
-                    onChange={(e) => setOlQuery(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && onOlSearch(olQuery)}
-                  />
-                  <Button onClick={() => onOlSearch(olQuery)} className="shrink-0">Search</Button>
-                </div>
-              </div>
-
-              {/* Enhanced Sidebar content inside sidebar */}
-              {olLocationData && (
-                <div className="mt-4 space-y-3">
-                  <div className="relative h-32 rounded-lg overflow-hidden bg-gradient-to-br from-orange-400 to-red-500">
-                    {olLocationData.imageUrl && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={olLocationData.imageUrl} alt={olLocationData.title} className="absolute inset-0 w-full h-full object-cover" />
-                    )}
-                    <div className="absolute inset-0 bg-black/30" />
-                    <div className="absolute bottom-2 left-3 text-white">
-                      <h3 className="font-semibold text-sm">{olLocationData.title}</h3>
-                      <p className="text-xs opacity-90">{olLocationData.country} • {olLocationData.currency}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 text-xs text-gray-700 dark:text-gray-300">
-                    <div className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
-                      <p><strong>City:</strong> {olLocationData.city}</p>
-                      <p><strong>Language:</strong> {olLocationData.language}</p>
-                      <p><strong>Coordinates:</strong> {olLocationData.coordinates[0]}, {olLocationData.coordinates[1]}</p>
-                    </div>
-
-                    <div className="bg-green-50 dark:bg-green-900/20 p-2 rounded">
-                      <p className="mb-1"><strong>Food Streets:</strong> {olLocationData.famousFoodStreets?.length || 0}</p>
-                      <div className="space-y-1 max-h-40 overflow-auto pr-1">
-                        {olLocationData.famousFoodStreets?.slice(0, 3).map((street: any, idx: number) => (
-                          <div key={idx} className="border rounded p-2">
-                            <p className="font-medium text-gray-800 dark:text-gray-100 text-xs">{street.name}</p>
-                            <p className="text-[11px] text-gray-600 dark:text-gray-400 line-clamp-2">{street.description}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {olLocationData.localRestrictions && olLocationData.localRestrictions.length > 0 && (
-                      <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded">
-                        <p className="font-medium">Local Rules</p>
-                        <ul className="list-disc list-inside text-[11px]">
-                          {olLocationData.localRestrictions.slice(0, 3).map((r: any, i: number) => (
-                            <li key={i}>{r.category}: {r.restriction}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-xs rounded-lg p-3 ${
+                      msg.sender === "user"
+                        ? "bg-blue-500 text-white"
+                        : "bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white"
+                    }`}
+                  >
+                    <p className="text-sm">{msg.text}</p>
+                    <p className={`text-xs mt-1 ${msg.sender === "user" ? "text-blue-100" : "text-gray-500"}`}>
+                      {formatTime(msg.timestamp)}
+                    </p>
                   </div>
                 </div>
-              )}
+              ))}
             </div>
           </ScrollArea>
-
+          <div className="p-4 border-t border-gray-200 dark:border-slate-700 flex-shrink-0 bg-white dark:bg-slate-900 sticky bottom-0 shadow-lg">
+            <div className="flex space-x-2">
+              <Input
+                placeholder="Type your message..."
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                className="flex-1 h-10 border-2 border-gray-300 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400"
+              />
+              <Button onClick={handleSendMessage} size="icon" className="h-10 w-10 bg-blue-500 hover:bg-blue-600">
+                <Navigation className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </div>
       ) : (
         <ScrollArea className="h-[calc(100vh-140px)] p-4">
@@ -337,5 +303,4 @@ export function TouristSidebar(props: TouristSidebarProps) {
 }
 
 export default TouristSidebar
-
 

@@ -77,8 +77,6 @@ export function TouristDashboard() {
   const [selectedRoute, setSelectedRoute] = useState<RouteSuggestion | null>(null)
   const [isNavigating, setIsNavigating] = useState(false)
   const mapRef = useRef<any>(null)
-  const [olSearchRequest, setOlSearchRequest] = useState<string | null>(null)
-  const [olLocationData, setOlLocationData] = useState<any | null>(null)
 
   const popularDestinations = [
     { name: "Erode", coordinates: [77.7230, 11.3410] as [number, number] },
@@ -270,8 +268,6 @@ export function TouristDashboard() {
         formatTime={formatTime}
         getRouteIcon={getRouteIcon}
         getRouteColor={getRouteColor}
-        onOlSearch={(q) => setOlSearchRequest(q)}
-        olLocationData={olLocationData}
       />
 
       {/* Main Content with margin for sidebar */}
@@ -313,27 +309,11 @@ export function TouristDashboard() {
         </header>
 
         <div className="p-4 space-y-6 flex-1 overflow-auto">
-        {activeTab === "chat" ? (
-          /* OLMap Section */
-          <Card className="bg-white/10 dark:bg-black/20 border border-white/20 dark:border-white/10 shadow-2xl rounded-xl full-w">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                Chat with Map
-              </CardTitle>
-              <CardDescription>
-                Conversational map interaction with live data
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <OLMapComponent 
-                showUI={false} 
-                searchRequest={olSearchRequest} 
-                onLocationDataUpdate={setOlLocationData} 
-              />
-            </CardContent>
-          </Card>
-        ) : (
+          {activeTab === "chat" ? (
+            <div className="rounded-xl overflow-hidden">
+              <OLMapComponent />
+            </div>
+          ) : (
           /* Interactive Map Section */
           <Card className="bg-white/10 dark:bg-black/20 border border-white/20 dark:border-white/10 shadow-2xl rounded-xl full-w">
             <CardHeader>
@@ -361,7 +341,7 @@ export function TouristDashboard() {
               />
             </CardContent>
           </Card>
-        )}
+          )}
 
           {/* Rest of the dashboard content remains the same */}
           {/* Digital ID & SOS */}
