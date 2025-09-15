@@ -59,7 +59,13 @@ const Loader = () => (
   </div>
 );
 
-const OLMapComponent = () => {
+interface OLMapProps {
+  showUI?: boolean;
+  searchRequest?: string | null;
+  onLocationDataUpdate?: (data: EnhancedLocationData | null) => void;
+}
+
+const OLMapComponent = ({ showUI = true, searchRequest = null, onLocationDataUpdate }: OLMapProps) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<Map | null>(null);
   const [locationData, setLocationData] = useState<EnhancedLocationData | null>(null);
@@ -158,17 +164,18 @@ const OLMapComponent = () => {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!inputValue) return;
+  const handleSubmit = async (override?: string) => {
+    const query = override ?? inputValue;
+    if (!query) return;
   
     setLoading(true);
     try {
-      setSubmittedQuestion(inputValue);
+      setSubmittedQuestion(query);
   
       const response = await fetch("/api/getlocation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: inputValue }),
+        body: JSON.stringify({ value: query }),
       });
   
       const contentType = response.headers.get("content-type");
@@ -192,13 +199,27 @@ const OLMapComponent = () => {
       } else {
         alert("Could not find location data. Please try again.");
       }
-      setInputValue("");
+      if (!override) setInputValue("");
     } catch (error) {
       console.error(error);
       alert("Error connecting to API");
     }
     setLoading(false);
   };
+
+  // Trigger external searches
+  useEffect(() => {
+    if (searchRequest && searchRequest.trim()) {
+      handleSubmit(searchRequest);
+    }
+  }, [searchRequest]);
+
+  // Notify parent of data updates
+  useEffect(() => {
+    if (onLocationDataUpdate) {
+      onLocationDataUpdate(locationData);
+    }
+  }, [locationData, onLocationDataUpdate]);
 
   const handleStoreClick = (store: FoodStore) => {
     if (store.googleMapsUrl) {
@@ -213,6 +234,8 @@ const OLMapComponent = () => {
       {/* Main Map */}
       <div ref={mapRef} style={{ width: "100vw", height: "100vh" }} />
 
+      {showUI && (
+        <>
       {/* Search Bar */}
       <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-[15000]">
         <div className="bg-white rounded-full shadow-lg p-2 flex items-center space-x-2 min-w-96">
@@ -227,7 +250,7 @@ const OLMapComponent = () => {
             }}
           />
           <button 
-            onClick={handleSubmit} 
+            onClick={() => handleSubmit()} 
             className="bg-gradient-to-r from-orange-500 to-red-500 text-white px-6 py-2 rounded-full hover:from-orange-600 hover:to-red-600 transition-all duration-200 font-medium shadow-md"
           >
             Explore 🔍
@@ -428,7 +451,6 @@ const OLMapComponent = () => {
           </div>
         </div>
       )}
-
       {/* Floating Action Button to reopen sidebar */}
       {locationData && !showSidebar && (
         <button 
@@ -437,6 +459,8 @@ const OLMapComponent = () => {
         >
           🍜
         </button>
+      )}
+        </>
       )}
     </>
   );
