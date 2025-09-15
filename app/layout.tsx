@@ -5,7 +5,6 @@ import { GeistMono } from "geist/font/mono"
 import { Analytics } from "@vercel/analytics/next"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/components/auth-provider"
-import { NotificationSystem } from "@/components/advanced/notification-system"
 import { AIChatbot } from "@/components/advanced/ai-chatbot"
 import { Suspense } from "react"
 import "./globals.css"
@@ -35,7 +34,6 @@ export default function RootLayout({
           <Suspense fallback={null}>
             <AuthProvider>
               {children}
-              <NotificationSystem />
               <AIChatbot />
             </AuthProvider>
           </Suspense>

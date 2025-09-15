@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAuth, type UserRole } from "@/components/auth-provider"
 import { RoleSelector } from "@/components/role-selector"
-import { Eye, EyeOff, Loader2, ArrowLeft } from "lucide-react"
+import { Eye, EyeOff, Loader2, ArrowLeft, Shield, User, Building, Plane, Hotel } from "lucide-react"
 
 interface SignupFormData {
   email: string;
@@ -120,8 +120,27 @@ export function SignupForm({ onBackToLogin }: SignupFormProps) {
   };
 
   const getRoleGradient = (role: UserRole | null) => {
-    if (!role) return "gradient-tourist"
-    return `gradient-${role}`
+    if (!role) return "from-blue-500 to-cyan-500"
+    switch(role) {
+      case 'tourist': return "from-blue-500 to-cyan-500";
+      case 'guide': return "from-green-500 to-emerald-500";
+      case 'police': return "from-amber-500 to-orange-500";
+      case 'hotel': return "from-purple-500 to-pink-500";
+      case 'airport': return "from-indigo-500 to-blue-500";
+      default: return "from-blue-500 to-cyan-500";
+    }
+  };
+
+  const getRoleIcon = (role: UserRole | null) => {
+    if (!role) return <User className="h-5 w-5" />;
+    switch(role) {
+      case 'tourist': return <User className="h-5 w-5" />;
+      case 'guide': return <User className="h-5 w-5" />;
+      case 'police': return <Shield className="h-5 w-5" />;
+      case 'hotel': return <Hotel className="h-5 w-5" />;
+      case 'airport': return <Plane className="h-5 w-5" />;
+      default: return <User className="h-5 w-5" />;
+    }
   };
 
   const renderRoleSpecificFields = () => {
@@ -329,7 +348,7 @@ export function SignupForm({ onBackToLogin }: SignupFormProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
       <div className="w-full max-w-4xl">
         {step === "role" ? (
           <div className="text-center mb-8">
@@ -342,11 +361,18 @@ export function SignupForm({ onBackToLogin }: SignupFormProps) {
             <RoleSelector selectedRole={selectedRole} onRoleSelect={handleRoleSelect} />
           </div>
         ) : step === "credentials" ? (
-          <Card className="max-w-md mx-auto backdrop-blur-xl bg-white/10 dark:bg-black/20 border border-white/20 dark:border-white/10 shadow-2xl">
-            <div className={`h-2 ${getRoleGradient(selectedRole)}`} />
-            <CardHeader className="text-center">
+          <Card className="max-w-md mx-auto shadow-xl border-0">
+            <div className={`h-2 bg-gradient-to-r ${getRoleGradient(selectedRole)} rounded-t-lg`} />
+            <CardHeader className="text-center space-y-4">
+              <div className="flex justify-center">
+                <div className={`p-3 rounded-full bg-gradient-to-r ${getRoleGradient(selectedRole)} text-white`}>
+                  {getRoleIcon(selectedRole)}
+                </div>
+              </div>
               <CardTitle className="text-2xl">Create Account</CardTitle>
-              <CardDescription>Sign up as {selectedRole} to continue</CardDescription>
+              <CardDescription className="text-md">
+                Sign up as <span className="font-medium capitalize">{selectedRole}</span> to continue
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={(e) => { e.preventDefault(); handleCredentialsNext(); }} className="space-y-4">
@@ -359,6 +385,7 @@ export function SignupForm({ onBackToLogin }: SignupFormProps) {
                     value={formData.email}
                     onChange={(e) => handleInputChange('email', e.target.value)}
                     required
+                    className="py-2 px-4"
                   />
                 </div>
 
@@ -372,6 +399,7 @@ export function SignupForm({ onBackToLogin }: SignupFormProps) {
                       value={formData.password}
                       onChange={(e) => handleInputChange('password', e.target.value)}
                       required
+                      className="py-2 px-4 pr-10"
                     />
                     <Button
                       type="button"
@@ -394,21 +422,29 @@ export function SignupForm({ onBackToLogin }: SignupFormProps) {
                     value={formData.confirmPassword}
                     onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
                     required
+                    className="py-2 px-4"
                   />
                 </div>
 
                 {error && (
-                  <div className="text-red-500 text-sm text-center">{error}</div>
+                  <div className="p-3 text-sm text-red-700 bg-red-100 rounded-lg dark:bg-red-900/30 dark:text-red-300 text-center">
+                    {error}
+                  </div>
                 )}
 
-                <div className="flex gap-2">
-                  <Button type="button" variant="outline" onClick={() => setStep("role")} className="flex-1">
+                <div className="flex gap-3 pt-2">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setStep("role")} 
+                    className="flex-1 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  >
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Back
                   </Button>
                   <Button
                     type="submit"
-                    className={`flex-1 ${getRoleGradient(selectedRole)} text-white border-0`}
+                    className={`flex-1 bg-gradient-to-r ${getRoleGradient(selectedRole)} text-white border-0 shadow-md hover:shadow-lg transition-shadow`}
                   >
                     Next
                   </Button>
@@ -417,29 +453,43 @@ export function SignupForm({ onBackToLogin }: SignupFormProps) {
             </CardContent>
           </Card>
         ) : (
-          <Card className="max-w-md mx-auto backdrop-blur-xl bg-white/10 dark:bg-black/20 border border-white/20 dark:border-white/10 shadow-2xl">
-            <div className={`h-2 ${getRoleGradient(selectedRole)}`} />
-            <CardHeader className="text-center">
+          <Card className="max-w-md mx-auto shadow-xl border-0">
+            <div className={`h-2 bg-gradient-to-r ${getRoleGradient(selectedRole)} rounded-t-lg`} />
+            <CardHeader className="text-center space-y-4">
+              <div className="flex justify-center">
+                <div className={`p-3 rounded-full bg-gradient-to-r ${getRoleGradient(selectedRole)} text-white`}>
+                  {getRoleIcon(selectedRole)}
+                </div>
+              </div>
               <CardTitle className="text-2xl">Complete Registration</CardTitle>
-              <CardDescription>Fill in your {selectedRole} details</CardDescription>
+              <CardDescription className="text-md">
+                Fill in your <span className="font-medium capitalize">{selectedRole}</span> details
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSignup} className="space-y-4">
                 {renderRoleSpecificFields()}
 
                 {error && (
-                  <div className="text-red-500 text-sm text-center">{error}</div>
+                  <div className="p-3 text-sm text-red-700 bg-red-100 rounded-lg dark:bg-red-900/30 dark:text-red-300 text-center">
+                    {error}
+                  </div>
                 )}
 
-                <div className="flex gap-2">
-                  <Button type="button" variant="outline" onClick={() => setStep("credentials")} className="flex-1">
+                <div className="flex gap-3 pt-2">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setStep("credentials")} 
+                    className="flex-1 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  >
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Back
                   </Button>
                   <Button
                     type="submit"
                     disabled={loading}
-                    className={`flex-1 ${getRoleGradient(selectedRole)} text-white border-0`}
+                    className={`flex-1 bg-gradient-to-r ${getRoleGradient(selectedRole)} text-white border-0 shadow-md hover:shadow-lg transition-shadow`}
                   >
                     {loading ? (
                       <>
@@ -453,13 +503,13 @@ export function SignupForm({ onBackToLogin }: SignupFormProps) {
                 </div>
 
                 {onBackToLogin && (
-                  <div className="text-center">
+                  <div className="text-center pt-4">
                     <p className="text-sm text-muted-foreground">
                       Already have an account?{' '}
                       <button
                         type="button"
                         onClick={onBackToLogin}
-                        className="text-primary hover:underline"
+                        className="font-medium text-primary hover:underline"
                       >
                         Sign in
                       </button>
