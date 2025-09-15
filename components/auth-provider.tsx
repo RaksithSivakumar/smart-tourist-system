@@ -136,6 +136,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const logout = () => {
+    const token = localStorage.getItem("smart-tourist-token")
+    const role = user?.role
+    // If a tourist logs out, notify backend to update last_seen
+    if (role === 'tourist' && token) {
+      fetch('/api/tourists/last-seen', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      }).catch(() => {})
+    }
     setUser(null)
     setError(null)
     localStorage.removeItem("smart-tourist-user")

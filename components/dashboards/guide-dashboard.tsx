@@ -5,7 +5,8 @@ import { useAuth } from "@/components/auth-provider"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, Users, AlertTriangle, Phone, Shield, LogOut } from "lucide-react"
+import { MapPin, Users, AlertTriangle, Phone, Shield, LogOut, Plus, Trash2, Send } from "lucide-react"
+import { Input } from "@/components/ui/input"
 
 interface Tourist {
   _id: string
@@ -32,9 +33,18 @@ export function GuideDashboard() {
   const [tourists, setTourists] = useState<Tourist[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [loading, setLoading] = useState(true)
+  const [itinerary, setItinerary] = useState<{ id: string; time: string; title: string; location: string }[]>([])
+  const [showBroadcast, setShowBroadcast] = useState(false)
+  const [broadcastMsg, setBroadcastMsg] = useState("")
 
   useEffect(() => {
     fetchData()
+    // load itinerary
+    const key = `guide-itinerary-${user?.id || user?._id || 'me'}`
+    try {
+      const saved = localStorage.getItem(key)
+      if (saved) setItinerary(JSON.parse(saved))
+    } catch {}
   }, [])
 
   const fetchData = async () => {
@@ -58,6 +68,27 @@ export function GuideDashboard() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const saveItinerary = (items: { id: string; time: string; title: string; location: string }[]) => {
+    setItinerary(items)
+    const key = `guide-itinerary-${user?.id || user?._id || 'me'}`
+    localStorage.setItem(key, JSON.stringify(items))
+  }
+
+  const addItinerary = () => {
+    const next = [...itinerary, { id: crypto.randomUUID(), time: "09:00", title: "New activity", location: user?.guide?.region_assigned || "" }]
+    saveItinerary(next)
+  }
+
+  const updateItinerary = (id: string, field: 'time'|'title'|'location', value: string) => {
+    const next = itinerary.map(i => i.id === id ? { ...i, [field]: value } : i)
+    saveItinerary(next)
+  }
+
+  const removeItinerary = (id: string) => {
+    const next = itinerary.filter(i => i.id !== id)
+    saveItinerary(next)
   }
 
   const getPriorityColor = (priority: string) => {
@@ -158,7 +189,7 @@ export function GuideDashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Assigned Tourists */}
+          {/* Assigned Tourists with attendance toggle */}
           <Card className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
@@ -196,6 +227,20 @@ export function GuideDashboard() {
                           <Phone className="h-4 w-4 mr-1" />
                           Contact
                         </Button>
+                        <label className="inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            onChange={(e) => {
+                              const key = `attendance-${new Date().toDateString()}-${tourist._id}`
+                              if (e.target.checked) localStorage.setItem(key, 'present')
+                              else localStorage.removeItem(key)
+                            }}
+                            defaultChecked={typeof window !== 'undefined' && localStorage.getItem(`attendance-${new Date().toDateString()}-${tourist._id}`) === 'present'}
+                          />
+                          <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:bg-green-500 transition"></div>
+                          <span className="ml-2 text-sm">Present</span>
+                        </label>
                       </div>
                     </div>
                   ))
@@ -250,6 +295,72 @@ export function GuideDashboard() {
                     </div>
                   ))
                 )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Itinerary Planner and Broadcast */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+          <Card className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <MapPin className="h-5 w-5" />
+                <span>Itinerary Planner</span>
+              </CardTitle>
+              <CardDescription>
+                Plan activities for your group. Stored locally for quick access.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {itinerary.length === 0 && (
+                  <p className="text-gray-500">No items yet. Add your first activity.</p>
+                )}
+                {itinerary.map(item => (
+                  <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center p-3 rounded-lg bg-gray-50 dark:bg-gray-700">
+                    <div className="md:col-span-2">
+                      <Input type="time" value={item.time} onChange={(e) => updateItinerary(item.id, 'time', e.target.value)} />
+                    </div>
+                    <div className="md:col-span-4">
+                      <Input value={item.title} onChange={(e) => updateItinerary(item.id, 'title', e.target.value)} placeholder="Activity title" />
+                    </div>
+                    <div className="md:col-span-5">
+                      <Input value={item.location} onChange={(e) => updateItinerary(item.id, 'location', e.target.value)} placeholder="Location" />
+                    </div>
+                    <div className="md:col-span-1 flex justify-end">
+                      <Button variant="outline" size="icon" onClick={() => removeItinerary(item.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex justify-between">
+                  <Button className="" onClick={addItinerary}>
+                    <Plus className="h-4 w-4 mr-2" /> Add Item
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Users className="h-5 w-5" />
+                <span>Group Broadcast</span>
+              </CardTitle>
+              <CardDescription>Draft a message to send to your tourists</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <Input placeholder="Quick reminder: meet in lobby at 9:00" value={broadcastMsg} onChange={(e) => setBroadcastMsg(e.target.value)} />
+                <div className="flex justify-end">
+                  <Button variant="outline" onClick={() => setBroadcastMsg("")}>Clear</Button>
+                  <Button className="ml-2" onClick={() => alert(`Message queued: ${broadcastMsg}`)}>
+                    <Send className="h-4 w-4 mr-2" /> Queue Message
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

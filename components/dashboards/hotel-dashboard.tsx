@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { useAuth } from "@/components/auth-provider"
 import {
   Building2,
@@ -31,42 +32,29 @@ interface Guest {
   status: "Checked In" | "Checked Out" | "No Show"
   safetyRating: number
   lastSeen: string
+  roomsRequired?: number
 }
 
 export function HotelDashboard() {
   const { user, logout } = useAuth()
-  const [guests] = useState<Guest[]>([
-    {
-      id: "G-001",
-      name: "John Smith",
-      room: "1205",
-      checkIn: "2024-01-15",
-      checkOut: "2024-01-18",
-      status: "Checked In",
-      safetyRating: 95,
-      lastSeen: "2 hours ago",
-    },
-    {
-      id: "G-002",
-      name: "Maria Garcia",
-      room: "0847",
-      checkIn: "2024-01-14",
-      checkOut: "2024-01-16",
-      status: "Checked In",
-      safetyRating: 88,
-      lastSeen: "30 min ago",
-    },
-    {
-      id: "G-003",
-      name: "David Chen",
-      room: "1534",
-      checkIn: "2024-01-15",
-      checkOut: "2024-01-20",
-      status: "Checked In",
-      safetyRating: 92,
-      lastSeen: "1 hour ago",
-    },
-  ])
+  const [guests, setGuests] = useState<Guest[]>([])
+  const [loadingGuests, setLoadingGuests] = useState(false)
+  const [showGuestForm, setShowGuestForm] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const [formValues, setFormValues] = useState({
+    name: "",
+    tourist_id: "",
+    id: "",
+    room_type: "",
+    rooms_required: 1,
+    address: "",
+    phone_number: "",
+    email: "",
+    check_in: "",
+    check_out: "",
+  })
 
   const [roomStatus] = useState({
     occupied: 156,
@@ -74,6 +62,125 @@ export function HotelDashboard() {
     maintenance: 8,
     total: 208,
   })
+
+  useEffect(() => {
+    const fetchGuests = async () => {
+      setLoadingGuests(true)
+      try {
+        const token = localStorage.getItem("smart-tourist-token")
+        const res = await fetch('/api/hotel/guests', {
+          headers: {
+            'Authorization': `Bearer ${token || ''}`,
+          },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const mapped: Guest[] = (data.guests || []).map((g: any, idx: number) => ({
+            id: g._id || String(idx),
+            name: g.name,
+            room: g.room_type,
+            checkIn: g.check_in?.slice?.(0, 10) || '',
+            checkOut: g.check_out?.slice?.(0, 10) || '',
+            status: "Checked In",
+            safetyRating: 90,
+            lastSeen: g.last_seen ? new Date(g.last_seen).toLocaleString() : "-",
+            roomsRequired: Number(g.rooms_required || 1),
+          }))
+          setGuests(mapped)
+        }
+      } finally {
+        setLoadingGuests(false)
+      }
+    }
+    fetchGuests()
+  }, [])
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target
+    setFormValues((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const validateForm = () => {
+    const { name, id, room_type, rooms_required, address, phone_number, email, check_in, check_out } = formValues
+    if (!name || !id || !room_type || !rooms_required || !address || !phone_number || !email || !check_in || !check_out) {
+      return 'Please fill in all fields.'
+    }
+    if (Number(rooms_required) < 1) {
+      return 'Rooms required must be at least 1.'
+    }
+    const cin = new Date(check_in)
+    const cout = new Date(check_out)
+    if (isNaN(cin.getTime()) || isNaN(cout.getTime())) {
+      return 'Invalid dates provided.'
+    }
+    if (cout <= cin) {
+      return 'Check-out must be after check-in.'
+    }
+    return null
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const err = validateForm()
+    if (err) {
+      setFormError(err)
+      return
+    }
+    setSubmitting(true)
+    setFormError(null)
+    try {
+      const token = localStorage.getItem("smart-tourist-token")
+      const res = await fetch('/api/hotel/guests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token || ''}`,
+        },
+        body: JSON.stringify({ ...formValues, rooms_required: Number(formValues.rooms_required) }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to add guest')
+      }
+      // refresh list
+      setShowGuestForm(false)
+      setFormValues({ name: "", tourist_id: "", id: "", room_type: "", rooms_required: 1, address: "", phone_number: "", email: "", check_in: "", check_out: "" })
+      // simple refetch
+      const refetch = await fetch('/api/hotel/guests', { headers: { 'Authorization': `Bearer ${token || ''}` } })
+      if (refetch.ok) {
+        const d = await refetch.json()
+        const mapped: Guest[] = (d.guests || []).map((g: any, idx: number) => ({
+          id: g._id || String(idx),
+          name: g.name,
+          room: g.room_type,
+          checkIn: g.check_in?.slice?.(0, 10) || '',
+          checkOut: g.check_out?.slice?.(0, 10) || '',
+          status: "Checked In",
+          safetyRating: 90,
+          lastSeen: g.last_seen ? new Date(g.last_seen).toLocaleString() : "-",
+          roomsRequired: Number(g.rooms_required || 1),
+        }))
+        setGuests(mapped)
+      }
+    } catch (error: any) {
+      setFormError(error?.message || 'Something went wrong')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const occupiedRooms = useMemo(() => {
+    const now = new Date()
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+    return guests.reduce((sum, g) => {
+      const cin = new Date(g.checkIn)
+      const cout = new Date(g.checkOut)
+      const overlapsToday = !(cout < dayStart || cin > dayEnd)
+      const rooms = Number(g.roomsRequired || 0)
+      return overlapsToday ? sum + (rooms > 0 ? rooms : 0) : sum
+    }, 0)
+  }, [guests])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 dark:from-amber-900 dark:to-orange-900">
@@ -91,6 +198,9 @@ export function HotelDashboard() {
           </div>
           <div className="flex items-center gap-2">
             <Badge className="bg-green-500 text-white">Online</Badge>
+            <Button className="gradient-hotel text-white" onClick={() => setShowGuestForm(true)}>
+              Add Guest
+            </Button>
             <Button variant="outline" onClick={logout}>
               <LogOut className="h-4 w-4 mr-2" />
               Sign Out
@@ -103,8 +213,8 @@ export function HotelDashboard() {
         {/* Hotel Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {[
-            { label: "Occupied Rooms", value: roomStatus.occupied.toString(), icon: Users, color: "bg-green-500" },
-            { label: "Available Rooms", value: roomStatus.available.toString(), icon: Building2, color: "bg-blue-500" },
+            { label: "Occupied Rooms", value: occupiedRooms.toString(), icon: Users, color: "bg-green-500" },
+            { label: "Available Rooms", value: "50", icon: Building2, color: "bg-blue-500" },
             { label: "Safety Alerts", value: "2", icon: AlertTriangle, color: "bg-yellow-500" },
             { label: "Avg Safety Score", value: "91%", icon: Shield, color: "bg-purple-500" },
           ].map((stat, index) => (
@@ -145,6 +255,10 @@ export function HotelDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3 max-h-80 overflow-y-auto">
+                {loadingGuests && <p className="text-sm text-muted-foreground">Loading guests...</p>}
+                {!loadingGuests && guests.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No guests yet.</p>
+                )}
                 {guests.map((guest) => (
                   <div key={guest.id} className="p-3 bg-white/50 rounded-lg border">
                     <div className="flex items-center justify-between mb-2">
@@ -154,7 +268,7 @@ export function HotelDashboard() {
                         </div>
                         <div>
                           <p className="font-medium">{guest.name}</p>
-                          <p className="text-sm text-muted-foreground">Room {guest.room}</p>
+                          <p className="text-sm text-muted-foreground">Room {guest.room} x{guest.roomsRequired || 1}</p>
                         </div>
                       </div>
                       <Badge className={guest.status === "Checked In" ? "bg-green-500" : "bg-gray-500"}>
@@ -302,6 +416,64 @@ export function HotelDashboard() {
           </Card>
         </div>
       </div>
+      {showGuestForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowGuestForm(false)} />
+          <div className="relative w-full max-w-xl backdrop-blur-xl bg-white/90 dark:bg-black/40 border border-white/20 dark:border-white/10 shadow-2xl rounded-xl p-4">
+            <h3 className="text-lg font-semibold mb-2">Add Guest</h3>
+            <p className="text-sm text-muted-foreground mb-4">Enter guest details. Tourist must exist in system.</p>
+            {formError && <p className="text-sm text-red-600 mb-2">{formError}</p>}
+            <form className="grid grid-cols-1 md:grid-cols-2 gap-3" onSubmit={handleSubmit}>
+              <div className="col-span-1 md:col-span-2">
+                <Label htmlFor="name">Name</Label>
+                <Input id="name" name="name" value={formValues.name} onChange={handleChange} placeholder="Guest full name" />
+              </div>
+              <div>
+                <Label htmlFor="tourist_id">Tourist ID or Email</Label>
+                <Input id="tourist_id" name="tourist_id" value={formValues.tourist_id} onChange={handleChange} placeholder="e.g. 68c8... or user@mail.com" />
+              </div>
+              <div>
+                <Label htmlFor="id">Government ID</Label>
+                <Input id="id" name="id" value={formValues.id} onChange={handleChange} placeholder="Passport / ID number" />
+              </div>
+              <div>
+                <Label htmlFor="room_type">Room Type/No</Label>
+                <Input id="room_type" name="room_type" value={formValues.room_type} onChange={handleChange} placeholder="e.g. 1205 / Deluxe" />
+              </div>
+              <div>
+                <Label htmlFor="rooms_required">No. of Rooms</Label>
+                <Input id="rooms_required" name="rooms_required" type="number" min={1} value={formValues.rooms_required as any} onChange={handleChange} placeholder="1" />
+              </div>
+              <div>
+                <Label htmlFor="address">Address</Label>
+                <Input id="address" name="address" value={formValues.address} onChange={handleChange} placeholder="Residential address" />
+              </div>
+              <div>
+                <Label htmlFor="phone_number">Phone Number</Label>
+                <Input id="phone_number" name="phone_number" value={formValues.phone_number} onChange={handleChange} placeholder="Contact number" />
+              </div>
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input id="email" name="email" type="email" value={formValues.email} onChange={handleChange} placeholder="guest@email.com" />
+              </div>
+              <div>
+                <Label htmlFor="check_in">Check-in Date</Label>
+                <Input id="check_in" name="check_in" type="date" value={formValues.check_in} onChange={handleChange} />
+              </div>
+              <div>
+                <Label htmlFor="check_out">Check-out Date</Label>
+                <Input id="check_out" name="check_out" type="date" value={formValues.check_out} onChange={handleChange} />
+              </div>
+              <div className="col-span-1 md:col-span-2 flex justify-end gap-2 mt-2">
+                <Button type="button" variant="outline" onClick={() => setShowGuestForm(false)}>Cancel</Button>
+                <Button type="submit" className="gradient-hotel text-white" disabled={submitting}>
+                  {submitting ? 'Saving...' : 'Save Guest'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user has permission to view alerts
-    const { allowed, error: roleError } = requireRole(['police'])(user);
+    const { allowed, error: roleError } = requireRole(['police', 'guide'])(user);
     if (!allowed) {
       return NextResponse.json(
         { error: roleError || 'Insufficient permissions' },
