@@ -165,7 +165,7 @@ const OLMapComponent = () => {
     try {
       setSubmittedQuestion(inputValue);
   
-      const response = await fetch("/api/getLocation", {
+      const response = await fetch("/api/getlocation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ value: inputValue }),
@@ -186,7 +186,7 @@ const OLMapComponent = () => {
   
       if (data && !('error' in data)) {
         const imageUrl = await fetchLocationImage(data.title);
-        setLocationData({ ...data, imageUrl });
+        setLocationData({ ...data, imageUrl: imageUrl ?? undefined });
         setActiveTab('overview');
         setSelectedFoodStreet(null);
       } else {
