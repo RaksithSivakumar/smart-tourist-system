@@ -13,6 +13,9 @@ if (!apiKey) {
 }
 const genAI = new GoogleGenerativeAI(apiKey);
 
+// Mapbox token for geocoding fallback (can reuse public token server-side for non-sensitive demo)
+const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+
 //4. Define enhanced response types for better TypeScript support.
 interface FoodStore {
   name: string;
@@ -149,8 +152,28 @@ Return ONLY valid JSON, no other text, markdown, or formatting. Ensure all coord
 
     console.log('Generated Prompt:', prompt);
 
-    //8. Generate content using Gemini.
-    const result = await model.generateContent(prompt);
+    //8. Generate content using Gemini with retry on transient errors.
+    const generateWithRetry = async (maxRetries = 2, baseDelayMs = 600) => {
+      let lastError: any = null;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          return await model.generateContent(prompt);
+        } catch (err: any) {
+          lastError = err;
+          const message = typeof err?.message === 'string' ? err.message : '';
+          const isTransient = message.includes('503') || message.includes('overloaded') || message.includes('temporarily') || message.includes('ENOTFOUND') || message.includes('ETIMEDOUT');
+          if (attempt < maxRetries && isTransient) {
+            const delay = baseDelayMs * Math.pow(2, attempt);
+            await new Promise((res) => setTimeout(res, delay));
+            continue;
+          }
+          break;
+        }
+      }
+      throw lastError;
+    };
+
+    const result = await generateWithRetry();
     const response = await result.response;
     
     //9. Extract content from the response.
@@ -215,18 +238,67 @@ Return ONLY valid JSON, no other text, markdown, or formatting. Ensure all coord
       } catch (parseError) {
         //18. Handle JSON parsing errors.
         console.error('JSON Parse Error:', parseError);
-        return NextResponse.json({ tryAgain: true });
+        return NextResponse.json({ error: 'Upstream returned invalid JSON, please retry.' }, { status: 502 });
       }
     } else {
       //19. Respond with tryAgain if the content is not valid JSON.
       console.log('Response is not valid JSON format:', responseText);
-      return NextResponse.json({ tryAgain: true });
+      // Fallback to geocoding minimal response
+      const fallback = await geocodeFallback(body.value);
+      if (fallback) return NextResponse.json(fallback);
+      return NextResponse.json({ error: 'Upstream returned non-JSON, please retry.' }, { status: 502 });
     }
   } catch (error) {
     //20. Handle any errors by responding with a 500 status and the error.
     console.error('Gemini API Error:', error);
-    const errorMessage = (error instanceof Error) ? error.message : 'Failed to process request';
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    const message = (error as any)?.message || 'Failed to process request';
+    // On transient errors, try geocoding fallback
+    if (typeof message === 'string' && (message.includes('503') || message.includes('overloaded'))) {
+      const body = await request.json().catch(() => null);
+      const q = body?.value;
+      const fallback = q ? await geocodeFallback(q) : null;
+      if (fallback) return NextResponse.json(fallback);
+    }
+    const statusHint = typeof message === 'string' && message.includes('503') ? 503 : 500;
+    return NextResponse.json({ error: message }, { status: statusHint });
+  }
+}
+
+// Geocode-based minimal fallback to keep UX working when LLM is unavailable
+async function geocodeFallback(query: string): Promise<EnhancedLocationResponse | null> {
+  try {
+    if (!mapboxToken) return null;
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${mapboxToken}&limit=1&types=place,locality,region,country,neighborhood,poi`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) return null;
+    const geo = await res.json();
+    if (!geo.features || geo.features.length === 0) return null;
+    const f = geo.features[0];
+    const [lon, lat] = f.center;
+    // Try to derive city and country from context
+    let city = f.text || 'Unknown';
+    let country = 'Unknown';
+    if (Array.isArray(f.context)) {
+      for (const c of f.context) {
+        if (typeof c.id === 'string' && c.id.startsWith('country')) country = c.text || country;
+        if (typeof c.id === 'string' && (c.id.startsWith('place') || c.id.startsWith('locality'))) city = c.text || city;
+      }
+    }
+    const minimal: EnhancedLocationResponse = {
+      coordinates: [lat, lon],
+      title: f.place_name || query,
+      country,
+      city,
+      famousFoodStreets: [],
+      localRestrictions: [],
+      culturalTips: [],
+      currency: 'Unknown',
+      language: 'Unknown',
+    };
+    return minimal;
+  } catch (e) {
+    console.error('Geocoding fallback failed:', e);
+    return null;
   }
 }
 
