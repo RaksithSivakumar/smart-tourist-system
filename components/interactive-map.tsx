@@ -1,3 +1,4 @@
+// components/interactive-map.tsx
 "use client"
 
 import { useEffect, useRef, useState } from "react"
@@ -13,11 +14,21 @@ mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_API_KEY || "pk.eyJ1Ijoic21
 
 interface MapMarker {
   id: string
-  type: "tourist" | "police" | "hospital" | "embassy" | "hotel" | "airport"
+  type: "tourist" | "police" | "hospital" | "embassy" | "hotel" | "airport" | "unsafe"
   position: [number, number]
   title: string
   status?: string
   safetyScore?: number
+}
+
+interface Geofence {
+  _id: string
+  name: string
+  note?: string
+  geometry: {
+    type: "Polygon"
+    coordinates: number[][][]  // Fixed structure
+  }
 }
 
 interface RouteCoordinates {
@@ -53,8 +64,10 @@ export function InteractiveMap({ selectedRoute, isNavigating }: InteractiveMapPr
   const [routeError, setRouteError] = useState<string | null>(null)
   const markersRef = useRef<mapboxgl.Marker[]>([])
   const routeSourceRef = useRef<string | null>(null)
+  const [geofences, setGeofences] = useState<Geofence[]>([])
+  const [loadingGeofences, setLoadingGeofences] = useState(false)
 
-  // --- MODIFIED: Sample markers data relevant to Tamil Nadu ---
+  // Sample markers data relevant to Tamil Nadu
   const markers: MapMarker[] = [
     { id: "1", type: "tourist", position: [77.244, 11.497], title: "Sathyamangalam", status: "Safe", safetyScore: 95 },
     { id: "2", type: "police", position: [77.72, 11.34], title: "Erode Police Station", status: "Active" },
@@ -82,7 +95,55 @@ export function InteractiveMap({ selectedRoute, isNavigating }: InteractiveMapPr
     })
   }
 
-  // This function is perfect, it fetches the route geometry.
+  // Fetch geofences from API
+  const fetchGeofences = async () => {
+    setLoadingGeofences(true);
+    try {
+      // Try to get token from localStorage
+      let token = null;
+      try {
+        token = localStorage.getItem('token');
+      } catch (e) {
+        console.log('Cannot access localStorage:', e);
+      }
+      
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      // Only add authorization if token exists
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch('/api/geofences', {
+        method: 'GET',
+        headers,
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setGeofences(data.geofences || []);
+      } else if (response.status === 401) {
+        console.log('Unauthorized access to geofences, continuing without authentication');
+        // Try without authentication
+        const retryResponse = await fetch('/api/geofences');
+        if (retryResponse.ok) {
+          const data = await retryResponse.json();
+          setGeofences(data.geofences || []);
+        } else {
+          console.error('Failed to fetch geofences:', retryResponse.statusText);
+        }
+      } else {
+        console.error('Failed to fetch geofences:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Error fetching geofences:', error);
+    } finally {
+      setLoadingGeofences(false);
+    }
+  };
+  // This function fetches the route geometry.
   const getDirections = async (start: [number, number], end: [number, number], profile: string = 'driving') => {
     const accessToken = mapboxgl.accessToken
     const coordinates = `${start[0]},${start[1]};${end[0]},${end[1]}`
@@ -225,10 +286,109 @@ export function InteractiveMap({ selectedRoute, isNavigating }: InteractiveMapPr
     document.querySelectorAll('.route-marker').forEach(marker => marker.remove())
   }
 
+  // Add geofences to map as polygons
+  const addGeofencesToMap = () => {
+    if (!map.current || geofences.length === 0) return
+
+    // Remove existing geofence sources and layers
+    geofences.forEach((geofence) => {
+      const sourceId = `geofence-${geofence._id}`
+      const fillLayerId = `geofence-fill-${geofence._id}`
+      const strokeLayerId = `geofence-stroke-${geofence._id}`
+      
+      if (map.current!.getSource(sourceId)) {
+        if (map.current!.getLayer(fillLayerId)) {
+          map.current!.removeLayer(fillLayerId)
+        }
+        if (map.current!.getLayer(strokeLayerId)) {
+          map.current!.removeLayer(strokeLayerId)
+        }
+        map.current!.removeSource(sourceId)
+      }
+    })
+
+    // Add each geofence as a polygon
+    geofences.forEach((geofence) => {
+      const sourceId = `geofence-${geofence._id}`
+      const fillLayerId = `geofence-fill-${geofence._id}`
+      const strokeLayerId = `geofence-stroke-${geofence._id}`
+      
+      // Create GeoJSON feature from the geofence data
+      const geofenceFeature = {
+        type: 'Feature',
+        properties: {
+          name: geofence.name,
+          note: geofence.note || 'Unsafe Area'
+        },
+        geometry: geofence.geometry
+      }
+
+      map.current!.addSource(sourceId, {
+        type: 'geojson',
+        data: geofenceFeature
+      })
+
+      // Add fill layer for the geofence polygon
+      map.current!.addLayer({
+        id: fillLayerId,
+        type: 'fill',
+        source: sourceId,
+        paint: {
+          'fill-color': '#ff4444',
+          'fill-opacity': 0.3
+        }
+      })
+
+      // Add stroke layer for the geofence polygon
+      map.current!.addLayer({
+        id: strokeLayerId,
+        type: 'line',
+        source: sourceId,
+        paint: {
+          'line-color': '#ff0000',
+          'line-width': 2,
+          'line-opacity': 0.8
+        }
+      })
+
+      // Add click handler for geofence info
+      map.current!.on('click', fillLayerId, (e) => {
+        const coordinates = e.lngLat
+        const properties = e.features?.[0]?.properties
+
+        if (properties) {
+          new mapboxgl.Popup()
+            .setLngLat(coordinates)
+            .setHTML(`
+              <div class="p-3">
+                <h3 class="font-semibold text-red-600">⚠️ ${properties.name}</h3>
+                <p class="text-sm text-gray-700">${properties.note}</p>
+                <div class="mt-2">
+                  <span class="inline-block px-2 py-1 text-xs rounded bg-red-100 text-red-800">
+                    UNSAFE AREA
+                  </span>
+                </div>
+              </div>
+            `)
+            .addTo(map.current!)
+        }
+      })
+
+      // Change cursor on hover
+      map.current!.on('mouseenter', fillLayerId, () => {
+        map.current!.getCanvas().style.cursor = 'pointer'
+      })
+
+      map.current!.on('mouseleave', fillLayerId, () => {
+        map.current!.getCanvas().style.cursor = ''
+      })
+    })
+  }
+
   useEffect(() => {
     if (map.current || !mapContainer.current) return
 
-    // --- MODIFIED: Default map center and zoom level ---
+    // Default map center and zoom level
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: mapTheme === "dark" 
@@ -284,6 +444,9 @@ export function InteractiveMap({ selectedRoute, isNavigating }: InteractiveMapPr
         setUserLocation(location)
     })
 
+    // Fetch geofences when map is ready
+    fetchGeofences()
+
     return () => {
       if (map.current) {
         map.current.remove()
@@ -291,6 +454,13 @@ export function InteractiveMap({ selectedRoute, isNavigating }: InteractiveMapPr
       }
     }
   }, [])
+
+  // Add geofences to map when they are loaded
+  useEffect(() => {
+    if (map.current && geofences.length > 0) {
+      addGeofencesToMap()
+    }
+  }, [geofences, map.current])
 
   useEffect(() => {
     if (selectedRoute && isNavigating) {
@@ -305,8 +475,6 @@ export function InteractiveMap({ selectedRoute, isNavigating }: InteractiveMapPr
   useEffect(() => {
     const handleShowRoute = (event: CustomEvent) => {
       if (event.detail && map.current) {
-        // The selectedRoute object might not be fully updated yet, so we merge
-        // the coordinates from the event with a base route structure.
         addRouteToMap({ 
           id: selectedRoute?.id || 'event-route',
           type: selectedRoute?.type || 'driving',
@@ -341,7 +509,6 @@ export function InteractiveMap({ selectedRoute, isNavigating }: InteractiveMapPr
     }
   }, [mapTheme])
 
-  // --- The rest of the InteractiveMap component remains the same ---
   const getMarkerIconString = (type: string) => {
     switch (type) {
       case "tourist":
@@ -356,6 +523,8 @@ export function InteractiveMap({ selectedRoute, isNavigating }: InteractiveMapPr
         return '<div class="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-amber-600 flex items-center justify-center shadow-lg"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z"/><path d="M9 22V12h6v10"/></svg></div>'
       case "airport":
         return '<div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-600 flex items-center justify-center shadow-lg"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg></div>'
+      case "unsafe":
+        return '<div class="w-8 h-8 rounded-full bg-gradient-to-br from-red-500 to-red-700 flex items-center justify-center shadow-lg animate-pulse"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>'
       default:
         return '<div class="w-8 h-8 rounded-full bg-gradient-to-br from-gray-400 to-gray-600 flex items-center justify-center shadow-lg"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></div>'
     }
@@ -391,6 +560,19 @@ export function InteractiveMap({ selectedRoute, isNavigating }: InteractiveMapPr
         ref={mapContainer}
         className="w-full h-full"
       />
+      
+      {/* Unsafe Areas Legend */}
+      {geofences.length > 0 && (
+        <div className="absolute bottom-20 left-4 z-10">
+          <Card className="backdrop-blur-xl bg-white/80 dark:bg-black/80 border border-red-300 dark:border-red-600 p-2">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-red-500 opacity-30 rounded-sm"></div>
+              <span className="text-xs font-medium text-red-700 dark:text-red-300">Unsafe Areas</span>
+            </div>
+          </Card>
+        </div>
+      )}
+      
       <div className="absolute top-4 right-4 flex flex-col gap-2">
         <Button
           size="icon"
@@ -450,11 +632,22 @@ export function InteractiveMap({ selectedRoute, isNavigating }: InteractiveMapPr
         </div>
       )}
 
+      {loadingGeofences && (
+        <div className="absolute top-4 left-4 z-10">
+          <Card className="backdrop-blur-xl bg-red-500/20 dark:bg-red-500/10 border border-red-400/30 p-3">
+            <div className="flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-600 border-t-transparent"></div>
+              <span className="text-sm text-red-800 dark:text-red-200">Loading safety zones...</span>
+            </div>
+          </Card>
+        </div>
+      )}
+
       {routeError && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
           <Card className="backdrop-blur-xl bg-red-500/20 dark:bg-red-500/10 border border-red-400/30 p-3">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
+              <AlertTriangle className="w-4 w-4 text-red-600 dark:text-red-400" />
               <span className="text-sm text-red-800 dark:text-red-200">{routeError}</span>
             </div>
           </Card>
@@ -466,7 +659,7 @@ export function InteractiveMap({ selectedRoute, isNavigating }: InteractiveMapPr
           <Card className="bg-blue-500 dark:bg-blue-500 border border-blue-400/30 p-3 min-w-[250px]">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <NavigationIcon className="w-4 h-4 text-blue-100 dark:text-blue-400" />
+                <NavigationIcon className="w-4 w-4 text-blue-100 dark:text-blue-400" />
                 <span className="text-sm font-medium text-blue-100 dark:text-blue-200">Navigating</span>
               </div>
               <Badge className="bg-green-500 text-white-900 text-xs">Live</Badge>
