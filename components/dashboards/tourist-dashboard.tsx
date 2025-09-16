@@ -1,3 +1,4 @@
+// components/dashboards/tourist-dashboard.tsx
 "use client"
 
 import { useState, useRef, useEffect } from "react"
@@ -17,7 +18,6 @@ import {
 } from "lucide-react"
 import TouristSidebar from "@/components/dashboards/tourist-sidebar"
 import dynamic from 'next/dynamic'
-import OLMapComponent from "@/components/OLMapComponent"
 
 // Dynamically import the map component to avoid SSR issues
 const InteractiveMap = dynamic(() => import('@/components/interactive-map').then(mod => ({ default: mod.InteractiveMap })), {
@@ -85,7 +85,7 @@ export function TouristDashboard() {
     { name: "Tiruppur", coordinates: [77.3411, 11.1085] as [number, number] },
   ]
     
-  // --- NEW: Function to get coordinates from a location name using Mapbox Geocoding API ---
+  // Function to get coordinates from a location name using Mapbox Geocoding API
   const getCoordinates = async (locationName: string): Promise<[number, number] | null> => {
     if (locationName.toLowerCase() === 'current location') {
         return new Promise((resolve) => {
@@ -110,7 +110,7 @@ export function TouristDashboard() {
     }
   };
 
-  // --- MODIFIED: Function to fetch real routes from Mapbox ---
+  // Function to fetch real routes from Mapbox
   const handleFindRoutes = async () => {
     if (!endLocation || !startLocation) return;
 
@@ -242,7 +242,6 @@ export function TouristDashboard() {
     }
   }
 
-  // --- UI and the rest of the component remains the same ---
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 to-cyan-50 dark:from-slate-900 dark:to-slate-800 flex">
       <TouristSidebar
@@ -311,7 +310,11 @@ export function TouristDashboard() {
         <div className="p-4 space-y-6 flex-1 overflow-auto">
           {activeTab === "chat" ? (
             <div className="rounded-xl overflow-hidden">
-              <OLMapComponent />
+              {/* You can add a different component here for chat view */}
+              <InteractiveMap 
+                selectedRoute={selectedRoute ?? undefined}
+                isNavigating={isNavigating}
+              />
             </div>
           ) : (
           /* Interactive Map Section */
@@ -343,7 +346,6 @@ export function TouristDashboard() {
           </Card>
           )}
 
-          {/* Rest of the dashboard content remains the same */}
           {/* Digital ID & SOS */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card className="backdrop-blur-xl bg-white/10 dark:bg-black/20 border border-white/20 dark:border-white/10 shadow-2xl rounded-xl">
@@ -422,46 +424,6 @@ export function TouristDashboard() {
               </CardContent>
             </Card>
           </div>
-
-          {/* Location & Navigation
-          <Card className="backdrop-blur-xl bg-white/10 dark:bg-black/20 border border-white/20 dark:border-white/10 shadow-2xl rounded-xl">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Navigation className="h-5 w-5" />
-                Smart Navigation & Route Planning
-              </CardTitle>
-              <CardDescription>AI-powered safe route recommendations and real-time updates</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">Current Location</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Times Square, New York, NY</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Last updated: 2 minutes ago</p>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span className="text-xs text-green-600 dark:text-green-400">Live Tracking Active</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Button className="w-full bg-gradient-to-r from-sky-400 to-cyan-500 hover:from-sky-500 hover:to-cyan-600 text-white border-0">
-                    <Navigation className="h-4 w-4 mr-2" />
-                    Get Safe Route
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full backdrop-blur-xl bg-white/10 dark:bg-black/20 border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-black/30"
-                  >
-                    <MapPin className="h-4 w-4 mr-2" />
-                    Share Location
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card> */}
-
-          {/* Blockchain Verification */}
-          {/* <BlockchainVerification /> */}
 
           {/* Quick Actions */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
